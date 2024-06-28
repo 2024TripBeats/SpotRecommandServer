@@ -1,4 +1,5 @@
 import joblib
+import requests
 import pandas as pd
 import numpy as np
 from geopy.distance import geodesic
@@ -21,7 +22,7 @@ MODEL_PATH = 'gbr_model.pkl'
 similarity_df = pd.read_csv(SIMILARITY_DF_PATH)
 master_visit_all = pd.read_csv(MASTER_VISIT_ALL_PATH)
 df = pd.read_csv(PLACE_CSV_PATH)
-similarity_df.set_index('Unnamed: 0', inplace=True)
+#similarity_df.set_index('Unnamed: 0', inplace=True)
 
 # 데이터 출력
 print("Similarity DataFrame:")
@@ -220,9 +221,88 @@ def generate_itinerary(df, similarity_dict, user_difficulty, user_openness, user
 
     return {"recommendations": recommendations}
 
+def gpt_api_zero(api_key, stopwords, requirewords, extracted_sim_final, master_visit_all):
+    # DataFrame을 JSON 형식으로 변환
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    message = [
+        {
+            "role": "user",
+            "content": "category_mapping = {'자연': '1', '숲': '1', '산책로': '7', '쇼핑': '4', '역사': '2', '유적': '2', '종교시설': '2', '문화': '3', '공연장': '3', '영화관': '3', '전시관': '3', '상업지구': '4', '시장': '4', '레저': '5', '스포츠': '5', '테마시설': '6', '놀이공원': '6', '워터파크': '6', '축제': '8', '행사': '8'}"
+        },
+        {
+            "role": "user",
+            "content": 'stopwords:' + stopwords
+        },
+        {
+            "role": "user",
+            "content": "위 stopwords에 대하여 category_mapping을 참고하여 몇번 카테고리를 제외해야 할까? \n답변에는 카테고리 숫자 한가지만 포함해줘. 절대 카테고리 숫자외에 어떠한 말도 답변에 포함시키지마.\n 만약 stop words의 내용이 어떠한 카테고리와도 관련이 없거나 아예 내용이 없다면 아무 내용도 답하지 말아줘"
+        },
+        {
+            "role": "user",
+            "content": 'requirewords:' + requirewords
+        },
+        {
+            "role": "user",
+            "content": "위 requirewords에 대하여 category_mapping을 참고하여 몇번 카테고리를 우선적으로 넣어야 할까? \n답변에 카테고리 숫자 한가지만 포함해줘. \n절대 카테고리 숫자외에 어떠한 말도 답변에 포함시키지마. 만약 require words의 내용이 어떠한 카테고리와도 관련이 없거나 아예 내용이 없다면 아무 내용도 답하지 말아줘."
+        },
+        {
+            "role": "user",
+            "content": "너는 requirewords를 통해 넣어야 할 카테고리 숫자와 stopwords를 통해 제외해야 할 카테고리 숫자 2개를 답변해야 해. \n각각의 숫자는 ,를 통해 구분해줘"
+        }
+    ]
+
+    payload = {
+        "model": "gpt-4",
+        "messages": message,
+        "max_tokens": 1000,
+        "temperature": 0
+    }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    if response.status_code == 200:
+        response_json = response.json()
+        content = response_json['choices'][0]['message']['content']
+        split_content = content.split(',')
+        stop = split_content[0]
+        require = split_content[1]
+    else:
+        print(f"Error: {response.status_code}")
+        print(response.text)
+        stop, require = None, None
+
+    if stop and require:
+        categories_to_remove = stop.split(',')
+        categories_to_increase = require.split(',')
+
+        # Stopwords 처리
+        original_places = master_visit_all['VISIT_AREA_NM'].tolist()
+        master_visit_all = master_visit_all[~master_visit_all['VISIT_AREA_TYPE_CD'].isin(categories_to_remove)]
+
+        # extracted_sim_final에서 행 제거
+        removed_places = master_visit_all['VISIT_AREA_NM'].tolist()
+        to_remove = [item for item in original_places if item not in removed_places]
+        extracted_sim_final = extracted_sim_final[~extracted_sim_final['Unnamed: 0'].isin(to_remove)]
+
+        # requirewords 처리
+        master_visit_all.loc[master_visit_all['VISIT_AREA_TYPE_CD'].isin(categories_to_increase), 'total_score'] += 5
+
+        # 전처리
+        master_visit_all = master_visit_all.drop(columns='Unnamed: 0')
+        extracted_sim_final.set_index('Unnamed: 0', inplace=True)
+
+    return master_visit_all, extracted_sim_final
 
 @app.post("/recommend", response_model=InferenceResponseDto)
 async def recommend(request: InferenceRequestDto):
+    # Apply preprocessing using GPT API
+    global master_visit_all, similarity_df
+    api_key = ""
+    master_visit_all, similarity_df = gpt_api_zero(api_key, request.stopwords, request.requirewords, similarity_df, master_visit_all)
+
     if request.gender == '1':
         gender = 0
     elif request.gender == '2':
