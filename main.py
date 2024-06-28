@@ -22,7 +22,7 @@ MODEL_PATH = 'gbr_model.pkl'
 similarity_df = pd.read_csv(SIMILARITY_DF_PATH)
 master_visit_all = pd.read_csv(MASTER_VISIT_ALL_PATH)
 df = pd.read_csv(PLACE_CSV_PATH)
-#similarity_df.set_index('Unnamed: 0', inplace=True)
+similarity_df.set_index('Unnamed: 0', inplace=True)
 
 # 데이터 출력
 print("Similarity DataFrame:")
@@ -148,6 +148,16 @@ def generate_itinerary(df, similarity_dict, user_difficulty, user_openness, user
         7: 2,  # 산책로
         8: 4  # 지역축제
     }
+    duration_map = {
+        1: 80,  # 자연관광지
+        2: 60,  # 역사
+        3: 60,  # 문화시설
+        4: 40,  # 상업지구
+        5: 140,  # 레저, 스포츠 관련 시설
+        6: 420,  # 놀이공원
+        7: 30,  # 산책로
+        8: 280  # 지역축제
+    }
 
     recommendations = []
     used_lower_similarity_place = False  # 사용자의 개방도에 따른 유사도가 낮은 장소 추천 여부
@@ -209,8 +219,14 @@ def generate_itinerary(df, similarity_dict, user_difficulty, user_openness, user
                                         (selected_places[-1]['lat'], selected_places[-1]['lng'])).km
                     travel_segments.append({"distance": distance})
 
-            itinerary = [{"placeId": str(df[df['VISIT_AREA_NM'] == place['VISIT_AREA_NM']].index[0]),
-                          "placeName": place['VISIT_AREA_NM'], "duration": 120} for place in selected_places]
+            itinerary = [
+                {
+                    "placeId": str(i),
+                    "placeName": place['VISIT_AREA_NM'],
+                    "duration": duration_map[place['VISIT_AREA_TYPE_CD']]
+                }
+                for i, place in enumerate(selected_places)
+            ]
 
             day_plan["candidates"].append({
                 "itinerary": itinerary,
@@ -285,14 +301,13 @@ def gpt_api_zero(api_key, stopwords, requirewords, extracted_sim_final, master_v
         # extracted_sim_final에서 행 제거
         removed_places = master_visit_all['VISIT_AREA_NM'].tolist()
         to_remove = [item for item in original_places if item not in removed_places]
-        extracted_sim_final = extracted_sim_final[~extracted_sim_final['Unnamed: 0'].isin(to_remove)]
+        extracted_sim_final = extracted_sim_final.drop(columns=to_remove, errors='ignore')
 
         # requirewords 처리
         master_visit_all.loc[master_visit_all['VISIT_AREA_TYPE_CD'].isin(categories_to_increase), 'total_score'] += 5
 
         # 전처리
-        master_visit_all = master_visit_all.drop(columns='Unnamed: 0')
-        extracted_sim_final.set_index('Unnamed: 0', inplace=True)
+        # master_visit_all = master_visit_all.drop(columns='Unnamed: 0')
 
     return master_visit_all, extracted_sim_final
 
