@@ -9,7 +9,7 @@ from trip_recom_realll import combined_recommendation
 from course import generate_recommendation
 
 # 데이터 파일 로드
-df_tr = pd.read_csv("./data/trip_df_final_v3.csv")
+df_tr = pd.read_csv("./data/trip_df_final_v6.csv")
 df_ca = pd.read_csv("./data/cafe_df.csv")
 df_re = pd.read_csv("./data/restaurant_df.csv")
 df_ac = pd.read_csv("./data/accom_Df.csv")
