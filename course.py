@@ -90,7 +90,7 @@ def determine_start_time(first_day_start):
         return datetime.strptime("09:00:00", "%H:%M:%S")
     elif first_day_start == '오후':
         return datetime.strptime("14:00:00", "%H:%M:%S")
-    elif first_day_start == '밤':
+    elif first_day_start == '저녁':
         return datetime.strptime("22:00:00", "%H:%M:%S")
 
 def generate_day_plan(restaurant_df, cafe_df, trip_df, start_datetime, end_time, user_difficulty, visited_places, cafes_added, current_accommodation, candidate_categories):
@@ -270,7 +270,7 @@ def generate_recommendation(restaurant_df, cafe_df, accommodation_df, trip_df, u
     candidates = []
     
     # 시작 시간 설정
-    start_time_map = {"오전": "10:00:00", "오후": "14:00:00", "밤": "22:00:00"}
+    start_time_map = {"오전": "10:00:00", "오후": "14:00:00", "저녁": "22:00:00"}
     first_day_start_time = start_time_map[start_time_option]
 
     for candidate_num in range(2):
@@ -292,8 +292,8 @@ def generate_recommendation(restaurant_df, cafe_df, accommodation_df, trip_df, u
             
             end_time = "22:00:00"
             
-            # 첫째 날이 밤인 경우 숙소만 추천
-            if day == 0 and start_time_option == "밤":
+            # 첫째 날이 저녁인 경우 숙소만 추천
+            if day == 0 and start_time_option == "저녁":
                 day_plan = [{
                     'place': current_accommodation,
                     'type': '숙소',
